@@ -87,12 +87,16 @@ freqz(filtered_IQ,1,2^10,'whole',Fs);
 title('Baseband Spectrum')
 ylim([-80 80]);
 
+%noise
+%awgn_oqpsk = awgn(oqpsk,1);
 
 %Demodulation
 demod_carrier = A*exp(-j*2*pi*(Fc/Fs)*n); %same as carrier
 
+%demod_sig = real(awgn_oqpsk).*demod_carrier;
 demod_sig = real(oqpsk).*demod_carrier;
 
+demod_sig = [zeros(1,500), demod_sig]*(1+j);
 
 figure(8)
 freqz(demod_sig,1,2^10,'whole',Fs);
@@ -125,42 +129,102 @@ plot(imag(filtered_IQ),'r-');
 title('Superimposed Imaginary Parts of the Pulse Shaped and Demodulated Pulse Shaped Signal')
 %xlim([0 100]);
 hold off
+%%
+% 
+% % cross correlation to figure out delay between recieved and transmitted
+% figure(13)
+% [c,lags] = xcorr(demod_sig,filtered_IQ);
+% stem(lags,abs(c))
+% 
+% 
+% [Max,index] = max(abs(c))
+% return
+% Max_delay_pos = index-length(c)/2;
+% 
+% %sample the demodsignal at every 20th sample
+% len_demod_sig  = length(demod_ps_real);
+% i = ceil(Max_delay_pos);
+% ;
+% data = zeros(1,len_demod_sig); %orecieved data bit stream
+% while i<len_demod_sig
+%     if demod_ps_real(i) < 0
+%     data(i) = 0;
+%     end
+%     if demod_ps_real(i) >= 0
+%     data(i) = 1;
+%     end
+%     i = i +10;
+% end
+% data = circshift(data,-17);
 
-%sample the demodsignal at every 20th sample
-len_demod_sig  = length(demod_ps_real);
-i = 8;
-data = zeros(1,len_demod_sig); %our final data stream (1 of 2)
-while i<len_demod_sig
-    if demod_ps_real(i) < 0
+
+%%
+
+preamble = filtered_IQ(1:1000);
+
+z = filter(fliplr(conj(preamble)),1,demod_sig);
+[Max,index] = max(abs(z))
+correlation  = z(index)
+figure(15)
+plot(abs(z))
+
+
+buffered_IQ = [zeros(1,500) filtered_IQ]/600;
+
+figure(16)
+hold on
+plot(real(filtered_IQ))
+plot(real(demod_sig),'-r')
+%plot(real(buffered_IQ*(correlation')),'-g')
+xlabel('sample number');
+ylabel('Magnitude');
+hold off
+
+
+figure(17)
+hold on
+plot(imag(filtered_IQ),'-b')
+%plot(imag(demod_sig),'-r')
+plot(imag(buffered_IQ*(correlation')),'-g')
+plot((index:spb:length(buffered_IQ)),imag(buffered_IQ(index:spb:length(buffered_IQ))*(correlation')),'xr')
+xlabel('sample number');
+ylabel('Magnitude');
+hold off
+
+demod_data = imag(buffered_IQ(1:spb:length(buffered_IQ))*(correlation'));
+
+i=1;
+data = zeros(1,length(demod_data)); %recieved data bit stream
+while i<length(demod_data)
+    if demod_data(i) < 0
     data(i) = 0;
     end
-    if demod_ps_real(i) >= 0
+    if demod_data(i) >= 0
     data(i) = 1;
-    end
-    i = i +20;
-end
-
-
-% turns polar NRZ random bits at the start to 0 and 1
-x  = length(Random);
-i = 1;
-while i<x
-    if Random(i) == -1
-    Random(i) = 0;
     end
     i = i +1;
 end
 
 
-i = 16;
 
-%samples random at every 20th sample
+
+% turns polar NRZ random bits at the start to 0 and 1
+x  = 1:spb:length(Random);
+Original_data = zeros(1,length(x));
+i = 1;
 while i<x
-    if Random(i) == -1
-    Random(i) = 0;
+    if Random(x) == -1
+    Original_data(i) = 0;
     end
-    i = i +20;
+    i = i +1;
 end
 
+
 %compares real data to random 
-error = biterr(Random,data)
+error = biterr(Original_data,data)
+
+figure(14)
+hold on
+stem(Random)
+stem(data,'-r')
+hold off
